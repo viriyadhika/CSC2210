@@ -9,41 +9,50 @@
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 
-# -----------------------
-# Environment
-# -----------------------
-module load cuda
-module load python
-
-# activate your venv if you use one
-# source ~/venvs/gpt2/bin/activate
-
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export TOKENIZERS_PARALLELISM=false
 
 # (helps debugging if something hangs)
 export NCCL_DEBUG=INFO
 
+export DEEPSPEED_COMM_BACKEND=nccl
+export DEEPSPEED_DISABLE_MPI=1
+
 # -----------------------
 # Run fine-tuning
 # -----------------------
-accelerate launch \
-  transformers/examples/pytorch/language-modeling/run_clm.py \
+# accelerate launch \
+#   run_clm.py \
+#   --model_name_or_path gpt2 \
+#   --train_file shakespeare.txt \
+#   --validation_file shakespeare.txt \
+#   --do_train \
+#   --block_size 512 \
+#   --per_device_train_batch_size 2 \
+#   --per_device_eval_batch_size 2 \
+#   --learning_rate 5e-5 \
+#   --num_train_epochs 20 \
+#   --weight_decay 0.01 \
+#   --fp16 \
+#   --logging_steps 50 \
+#   --output_dir out-gpt2-shakespeare \
+#   --overwrite_output_dir \
+#   --deepspeed ds_config.json
+
+
+torchrun --nproc_per_node=1 \
+  scripts/run_clm.py \
   --model_name_or_path gpt2 \
   --train_file shakespeare.txt \
-  --validation_file shakespeare.txt \
   --do_train \
-  --do_eval \
   --block_size 512 \
   --per_device_train_batch_size 2 \
-  --per_device_eval_batch_size 2 \
   --learning_rate 5e-5 \
+  --save_total_limit 2 \
   --num_train_epochs 20 \
   --weight_decay 0.01 \
   --fp16 \
   --logging_steps 50 \
-  --evaluation_strategy epoch \
-  --save_strategy epoch \
   --output_dir out-gpt2-shakespeare \
   --overwrite_output_dir \
-  --deepspeed ds_config.json
+  --deepspeed configs/single_gpu.json
