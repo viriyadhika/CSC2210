@@ -1,4 +1,5 @@
 .venv
 shakespeare.txt
 out-gpt2-shakespeare
+out-gpt2-dp
 logs
