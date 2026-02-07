@@ -45,6 +45,8 @@ from itertools import chain
 import datasets
 import evaluate
 import torch
+from torch.profiler import profile, record_function, ProfilerActivity
+from transformers import TrainerCallback
 from datasets import IterableDataset, IterableDatasetDict, load_dataset
 
 import transformers
@@ -76,6 +78,40 @@ logger = logging.getLogger(__name__)
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+
+class FirstNBatchesEveryEpochProfiler(TrainerCallback):
+    def __init__(self, profiler, start_batch=2, end_batch=5):
+        self.profiler = profiler
+        self.start_batch = start_batch
+        self.end_batch = end_batch
+        self.step_in_epoch = 0
+        self.enabled = False
+
+    def on_epoch_begin(self, args, state, control, **kwargs):
+        self.step_in_epoch = 0
+        self.enabled = False
+
+    def on_step_end(self, args, state, control, **kwargs):
+        self.step_in_epoch += 1
+
+        # Start profiler at batch 1
+        if self.step_in_epoch == self.start_batch:
+            self.profiler.start()
+            self.enabled = True
+
+        if self.enabled:
+            self.profiler.step()
+
+        # Stop profiler after batch 5
+        if self.step_in_epoch == self.end_batch:
+            self.profiler.stop()
+            self.enabled = False
+
+    def on_epoch_end(self, args, state, control, **kwargs):
+        # Safety stop (in case epoch is shorter)
+        if self.enabled:
+            self.profiler.stop()
+            self.enabled = False
 
 
 @dataclass
@@ -648,7 +684,16 @@ def main():
         checkpoint = None
         if training_args.resume_from_checkpoint is not None:
             checkpoint = training_args.resume_from_checkpoint
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
+
+        with torch.profiler.profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            schedule=torch.profiler.schedule(wait=0, warmup=0, active=999),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler("./profiler"),
+            record_shapes=True,
+            profile_memory=True,
+        ) as prof:
+            trainer.add_callback(FirstNBatchesEveryEpochProfiler(prof, start_batch=2, end_batch=6))
+            train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics

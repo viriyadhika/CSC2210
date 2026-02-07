@@ -5,6 +5,7 @@
 #SBATCH --ntasks=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
+#SBATCH --nodelist=gpunode32,gpunode33
 #SBATCH --cpus-per-task=8
 #SBATCH --time=01:00:00
 #SBATCH --output=logs/%x-%j.out
@@ -37,7 +38,7 @@ srun --label torchrun \
   --block_size 512 \
   --per_device_train_batch_size 2 \
   --learning_rate 5e-5 \
-  --num_train_epochs 20 \
+  --num_train_epochs 2 \
   --weight_decay 0.01 \
   --fp16 \
   --logging_steps 50 \

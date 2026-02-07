@@ -4,6 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
+#SBATCH --nodelist=gpunode32
 #SBATCH --cpus-per-task=8
 #SBATCH --time=01:00:00
 #SBATCH --output=logs/%x-%j.out
@@ -40,7 +41,8 @@ export DEEPSPEED_DISABLE_MPI=1
 #   --deepspeed ds_config.json
 
 
-torchrun --nproc_per_node=1 \
+srun --label torchrun \
+  --nproc_per_node=1 \
   scripts/run_clm.py \
   --model_name_or_path gpt2 \
   --train_file shakespeare.txt \
@@ -48,11 +50,9 @@ torchrun --nproc_per_node=1 \
   --block_size 512 \
   --per_device_train_batch_size 2 \
   --learning_rate 5e-5 \
-  --save_total_limit 2 \
-  --num_train_epochs 20 \
+  --num_train_epochs 2 \
   --weight_decay 0.01 \
   --fp16 \
   --logging_steps 50 \
   --output_dir out-gpt2-shakespeare \
-  --overwrite_output_dir \
-  --deepspeed configs/single_gpu.json
+  --overwrite_output_dir
